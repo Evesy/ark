@@ -323,7 +323,7 @@ type context struct {
 	resticRestorer       restic.Restorer
 	globalWaitGroup      arksync.ErrorGroup
 	resourceWaitGroup    sync.WaitGroup
-	resourceWatches      []watch.Interface
+	// resourceWatches      []watch.Interface
 }
 
 func (ctx *context) infof(msg string, args ...interface{}) {
@@ -383,11 +383,11 @@ func (ctx *context) restoreFromDir(dir string) (api.RestoreResult, api.RestoreRe
 	// until the very end of the restore. This should be done per resource type. Deferring
 	// refactoring for now since this may be able to be removed entirely if we eliminate
 	// waiting for PV snapshot restores.
-	defer func() {
-		for _, watch := range ctx.resourceWatches {
-			watch.Stop()
-		}
-	}()
+	// defer func() {
+	// 	for _, watch := range ctx.resourceWatches {
+	// 		watch.Stop()
+	// 	}
+	// }()
 
 	for _, resource := range ctx.prioritizedResources {
 		// we don't want to explicitly restore namespace API objs because we'll handle
@@ -590,7 +590,7 @@ func (ctx *context) restoreResource(resource, namespace, resourcePath string) (a
 		resourceClient    client.Dynamic
 		groupResource     = schema.ParseGroupResource(resource)
 		applicableActions []resolvedAction
-		resourceWatch     watch.Interface
+		// resourceWatch     watch.Interface
 	)
 
 	// pre-filter the actions based on namespace & resource includes/excludes since
@@ -665,24 +665,6 @@ func (ctx *context) restoreResource(resource, namespace, resourcePath string) (a
 			}
 			obj = updatedObj
 
-			if resourceWatch == nil {
-				resourceWatch, err = resourceClient.Watch(metav1.ListOptions{})
-				if err != nil {
-					addToResult(&errs, namespace, fmt.Errorf("error watching for namespace %q, resource %q: %v", namespace, &groupResource, err))
-					return warnings, errs
-				}
-				ctx.resourceWatches = append(ctx.resourceWatches, resourceWatch)
-
-				ctx.resourceWaitGroup.Add(1)
-				go func() {
-					defer ctx.resourceWaitGroup.Done()
-
-					if _, err := waitForReady(resourceWatch.ResultChan(), obj.GetName(), isPVReady, time.Minute, ctx.logger); err != nil {
-						ctx.logger.Warnf("Timeout reached waiting for persistent volume %s to become ready", obj.GetName())
-						addArkError(&warnings, fmt.Errorf("timeout reached waiting for persistent volume %s to become ready", obj.GetName()))
-					}
-				}()
-			}
 		}
 
 		for _, action := range applicableActions {
